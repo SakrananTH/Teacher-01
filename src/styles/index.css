@@ -1,0 +1,36 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+.dialog-scrollbar {
+}
+
+.dialog-scrollbar::-webkit-scrollbar {
+	width: 8px;
+}
+
+.dialog-scrollbar::-webkit-scrollbar-track {
+	background: #f1f5f9;
+	border-radius: 9999px;
+}
+
+.dialog-scrollbar::-webkit-scrollbar-thumb {
+	background: #cbd5e1;
+	border-radius: 9999px;
+}
+
+.login-hero-overlay {
+	background: linear-gradient(135deg, rgb(37 99 235 / 0.9), rgb(30 64 175 / 0.8), rgb(15 23 42 / 0.95));
+}
+
+.login-hero-fade {
+	background: linear-gradient(to top, rgb(15 23 42), transparent, transparent);
+}
+
+.auth-loading-bg {
+	background: linear-gradient(135deg, #eff6ff, #ffffff, #e0f2fe);
+}
+
+.auth-loading-badge {
+	background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
