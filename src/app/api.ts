@@ -2,13 +2,22 @@ import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { supabase } from "./lib/supabase";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-80ad9986/api`;
+const SESSION_REFRESH_BUFFER_SECONDS = 60;
+
+function isSessionExpired(expiresAt?: number | null) {
+  if (!expiresAt) {
+    return true;
+  }
+
+  return expiresAt <= Math.floor(Date.now() / 1000) + SESSION_REFRESH_BUFFER_SECONDS;
+}
 
 async function getAccessToken(forceRefresh = false) {
-  if (!forceRefresh) {
-    const { data } = await supabase.auth.getSession();
-    if (data.session?.access_token) {
-      return data.session.access_token;
-    }
+  const { data } = await supabase.auth.getSession();
+  const activeSession = data.session;
+
+  if (!forceRefresh && activeSession?.access_token && !isSessionExpired(activeSession.expires_at)) {
+    return activeSession.access_token;
   }
 
   const { data: refreshed, error } = await supabase.auth.refreshSession();
@@ -54,15 +63,17 @@ async function fetchAPI(
     if (refreshedToken) {
       return fetchAPI(endpoint, options, true, authMode, refreshedToken);
     }
+
+    await supabase.auth.signOut();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.assign("/login");
+    }
   }
 
   if (response.status === 401 && hasRetried && authMode === "user") {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) {
-      await supabase.auth.signOut();
-      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-        window.location.assign("/login");
-      }
+    await supabase.auth.signOut();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.assign("/login");
     }
   }
 
@@ -90,6 +101,7 @@ export const api = {
 
   // Attendance
   getAttendance: (date: string) => fetchAPI(`/attendance?date=${date}`),
+  getAttendanceSummary: () => fetchAPI("/attendance/summary"),
   saveAttendance: (date: string, records: Record<string, string>) =>
     fetchAPI("/attendance", {
       method: "POST",

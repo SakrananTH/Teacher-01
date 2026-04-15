@@ -5,16 +5,22 @@ import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js";
 const app = new Hono().basePath("/make-server-80ad9986");
 const createAdminClient = ()=>createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
-const createUserClient = (token)=>createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    }
-  });
 function getBearerToken(c) {
   const authorization = c.req.header("Authorization") || "";
   return authorization.replace(/^Bearer\s+/i, "").trim();
+}
+function parseJwtPayload(token) {
+  const segments = token.split(".");
+  if (segments.length < 2) {
+    return null;
+  }
+  try {
+    const normalized = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
 }
 async function requireUser(c) {
   const token = getBearerToken(c);
@@ -25,18 +31,22 @@ async function requireUser(c) {
       }, 401)
     };
   }
-  const supabaseUser = createUserClient(token);
-  const { data, error } = await supabaseUser.auth.getUser();
-  if (error || !data.user) {
+  const supabaseAdmin = createAdminClient();
+  const jwtPayload = parseJwtPayload(token);
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+  if (!jwtPayload?.sub || jwtPayload.exp && jwtPayload.exp < nowInSeconds) {
     return {
       error: c.json({
         error: "Unauthorized"
       }, 401)
     };
   }
-  const supabaseAdmin = createAdminClient();
   return {
-    user: data.user,
+    user: {
+      id: jwtPayload.sub,
+      email: jwtPayload.email,
+      user_metadata: jwtPayload.user_metadata || {}
+    },
     supabaseAdmin
   };
 }
@@ -340,6 +350,49 @@ app.get("/api/attendance", async (c)=>{
   } catch (error) {
     return c.json({
       error: error instanceof Error ? error.message : "Failed to fetch attendance"
+    }, 500);
+  }
+});
+app.get("/api/attendance/summary", async (c)=>{
+  try {
+    const auth = await requireUser(c);
+    if (auth.error) {
+      return auth.error;
+    }
+    const { user, supabaseAdmin } = auth;
+    const { data, error } = await supabaseAdmin.from("attendance_records").select("student_id, status, attendance_date").eq("owner_user_id", user.id).order("attendance_date", {
+      ascending: false
+    });
+    if (error) {
+      return c.json({
+        error: error.message
+      }, 500);
+    }
+    const mapped = (data || []).reduce((acc, row)=>{
+      if (!acc[row.student_id]) {
+        acc[row.student_id] = {
+          present: 0,
+          late: 0,
+          leave: 0,
+          absent: 0,
+          total: 0,
+          lastRecordedDate: row.attendance_date
+        };
+      }
+      const summary = acc[row.student_id];
+      if (typeof summary[row.status] === "number") {
+        summary[row.status] += 1;
+      }
+      summary.total += 1;
+      if (!summary.lastRecordedDate || row.attendance_date > summary.lastRecordedDate) {
+        summary.lastRecordedDate = row.attendance_date;
+      }
+      return acc;
+    }, {});
+    return c.json(mapped);
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : "Failed to fetch attendance summary"
     }, 500);
   }
 });
