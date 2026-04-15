@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { api } from "../api";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import {
   Calendar,
   ClipboardCheck,
@@ -23,11 +24,30 @@ interface Student {
   classRoom?: string;
 }
 
+interface AttendanceSummaryItem {
+  present: number;
+  late: number;
+  leave: number;
+  absent: number;
+  total: number;
+  lastRecordedDate?: string;
+}
+
 type Status = "present" | "late" | "absent" | "leave";
+
+const EMPTY_SUMMARY: AttendanceSummaryItem = {
+  present: 0,
+  late: 0,
+  leave: 0,
+  absent: 0,
+  total: 0,
+};
 
 export function Attendance() {
   const [students, setStudents] = useState<Student[]>([]);
   const [attendance, setAttendance] = useState<Record<string, Status>>({});
+  const [attendanceSummary, setAttendanceSummary] = useState<Record<string, AttendanceSummaryItem>>({});
+  const [isSummaryAvailable, setIsSummaryAvailable] = useState(true);
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -50,6 +70,15 @@ export function Attendance() {
         initialRecord[s.id] = attendanceData[s.id] || "present";
       });
       setAttendance(initialRecord);
+
+      try {
+        const summaryData = await api.getAttendanceSummary();
+        setAttendanceSummary(summaryData || {});
+        setIsSummaryAvailable(true);
+      } catch {
+        setAttendanceSummary({});
+        setIsSummaryAvailable(false);
+      }
     } catch (error: any) {
       toast.error("โหลดข้อมูลล้มเหลว", { description: error.message });
     } finally {
@@ -65,6 +94,16 @@ export function Attendance() {
     setIsSaving(true);
     try {
       await api.saveAttendance(selectedDate, attendance);
+
+      try {
+        const summaryData = await api.getAttendanceSummary();
+        setAttendanceSummary(summaryData || {});
+        setIsSummaryAvailable(true);
+      } catch {
+        setAttendanceSummary({});
+        setIsSummaryAvailable(false);
+      }
+
       toast.success("บันทึกข้อมูลการมาเรียนสำเร็จ!");
     } catch (error: any) {
       toast.error("บันทึกล้มเหลว", { description: error.message });
@@ -91,6 +130,17 @@ export function Attendance() {
 
   const ALL_CLASSES = ["ป.1", "ป.2", "ป.3", "ป.4", "ป.5", "ป.6"];
   const uniqueClasses = ALL_CLASSES; // เอา ทั้งหมด ออก
+
+  const summaryRows = filteredStudents.map((student) => {
+    const summary = attendanceSummary[student.id] || EMPTY_SUMMARY;
+    const attendanceRate = summary.total > 0 ? Math.round(summary.present / summary.total * 100) : 0;
+
+    return {
+      student,
+      summary,
+      attendanceRate,
+    };
+  });
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -181,115 +231,195 @@ export function Attendance() {
           <p className="text-blue-600/70 text-sm">กรุณาไปที่เมนู "จัดการนักเรียน" เพื่อเพิ่มรายชื่อก่อน</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          {/* Mobile Cards / Desktop Table */}
-          <div className="hidden md:block">
-            <table className="min-w-full divide-y divide-slate-100">
-              <thead>
-                <tr className="bg-slate-50/80">
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider w-20">
-                    เลขที่
-                  </th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    ชื่อ-นามสกุล
-                  </th>
-                  <th className="px-6 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider w-72">
-                    สถานะ
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filteredStudents.map((student) => (
-                  <tr key={student.id} className="hover:bg-blue-50/20 transition-colors group">
-                    <td className="px-6 py-3">
-                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600 text-sm font-bold group-hover:bg-emerald-100 group-hover:text-emerald-600 transition-colors">
-                        {student.number}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3 text-sm text-slate-700 font-medium">
-                      {student.name} <span className="text-slate-400 text-xs ml-2">({student.classRoom || "ทั่วไป"})</span>
-                    </td>
-                    <td className="px-6 py-3">
-                      <div className="flex bg-slate-100/80 p-1 rounded-xl max-w-[300px] mx-auto">
-                        {(["present", "late", "leave", "absent"] as Status[]).map((status) => {
-                          const isActive = attendance[student.id] === status;
-                          const config = {
-                            present: { label: "มา", activeClass: "bg-emerald-500 text-white" },
-                            late: { label: "สาย", activeClass: "bg-amber-500 text-white" },
-                            leave: { label: "ลา", activeClass: "bg-blue-500 text-white" },
-                            absent: { label: "ขาด", activeClass: "bg-rose-500 text-white" },
-                          };
-                          return (
-                            <button
-                              key={status}
-                              onClick={() => handleStatusChange(student.id, status)}
-                              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                                isActive ? config[status].activeClass : "text-slate-400 hover:bg-slate-200/50"
-                              }`}
-                            >
-                              {config[status].label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <Tabs defaultValue="daily" className="w-full">
+          <TabsList className="mb-4 grid w-full max-w-[420px] grid-cols-2 rounded-2xl bg-slate-100 p-1">
+            <TabsTrigger value="daily" className="rounded-2xl font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              ตรวจรายวัน
+            </TabsTrigger>
+            <TabsTrigger value="summary" className="rounded-2xl font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              สรุปภาพรวม
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Mobile View */}
-          <div className="md:hidden divide-y divide-slate-50">
-            {filteredStudents.map((student) => (
-              <div key={student.id} className="p-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600 text-sm font-bold">
-                      {student.number}
-                    </span>
-                    <span className="text-sm text-slate-700 font-medium">{student.name}</span>
+          <TabsContent value="daily">
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="hidden md:block">
+                <table className="min-w-full divide-y divide-slate-100">
+                  <thead>
+                    <tr className="bg-slate-50/80">
+                      <th className="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider w-20">
+                        เลขที่
+                      </th>
+                      <th className="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        ชื่อ-นามสกุล
+                      </th>
+                      <th className="px-6 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider w-72">
+                        สถานะ
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {filteredStudents.map((student) => (
+                      <tr key={student.id} className="hover:bg-blue-50/20 transition-colors group">
+                        <td className="px-6 py-3">
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600 text-sm font-bold group-hover:bg-emerald-100 group-hover:text-emerald-600 transition-colors">
+                            {student.number}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 text-sm text-slate-700 font-medium">
+                          {student.name} <span className="text-slate-400 text-xs ml-2">({student.classRoom || "ทั่วไป"})</span>
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="flex bg-slate-100/80 p-1 rounded-xl max-w-[300px] mx-auto">
+                            {(["present", "late", "leave", "absent"] as Status[]).map((status) => {
+                              const isActive = attendance[student.id] === status;
+                              const config = {
+                                present: { label: "มา", activeClass: "bg-emerald-500 text-white" },
+                                late: { label: "สาย", activeClass: "bg-amber-500 text-white" },
+                                leave: { label: "ลา", activeClass: "bg-blue-500 text-white" },
+                                absent: { label: "ขาด", activeClass: "bg-rose-500 text-white" },
+                              };
+                              return (
+                                <button
+                                  key={status}
+                                  onClick={() => handleStatusChange(student.id, status)}
+                                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                                    isActive ? config[status].activeClass : "text-slate-400 hover:bg-slate-200/50"
+                                  }`}
+                                >
+                                  {config[status].label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="md:hidden divide-y divide-slate-50">
+                {filteredStudents.map((student) => (
+                  <div key={student.id} className="p-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-600 text-sm font-bold">
+                          {student.number}
+                        </span>
+                        <span className="text-sm text-slate-700 font-medium truncate">{student.name}</span>
+                      </div>
+                      <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md">{student.classRoom || "ทั่วไป"}</span>
+                    </div>
+                    <div className="flex bg-slate-100/80 p-1 rounded-xl">
+                      {(["present", "late", "leave", "absent"] as Status[]).map((status) => {
+                        const isActive = attendance[student.id] === status;
+                        const config = {
+                          present: { label: "มาเรียน", activeClass: "bg-emerald-500 text-white" },
+                          late: { label: "มาสาย", activeClass: "bg-amber-500 text-white" },
+                          leave: { label: "ลา", activeClass: "bg-blue-500 text-white" },
+                          absent: { label: "ขาดเรียน", activeClass: "bg-rose-500 text-white" },
+                        };
+                        return (
+                          <button
+                            key={status}
+                            onClick={() => handleStatusChange(student.id, status)}
+                            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${
+                              isActive ? config[status].activeClass : "text-slate-400"
+                            }`}
+                          >
+                            {config[status].label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md">{student.classRoom || "ทั่วไป"}</span>
+                ))}
+              </div>
+
+              <div className="bg-slate-50/80 px-6 py-4 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 text-sm"
+                >
+                  <Save size={16} />
+                  {isSaving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
+                </button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="summary">
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">สรุปการมาเรียนสะสม</h2>
+                  <p className="text-sm text-slate-400">ดูจำนวนนักเรียนแต่ละคนว่า มาเรียน สาย ลา และขาด กี่ครั้งจากข้อมูลที่บันทึกไว้ทั้งหมด</p>
                 </div>
-                <div className="flex bg-slate-100/80 p-1 rounded-xl">
-                  {(["present", "late", "leave", "absent"] as Status[]).map((status) => {
-                    const isActive = attendance[student.id] === status;
-                    const config = {
-                      present: { label: "มาเรียน", activeClass: "bg-emerald-500 text-white" },
-                      late: { label: "มาสาย", activeClass: "bg-amber-500 text-white" },
-                      leave: { label: "ลา", activeClass: "bg-blue-500 text-white" },
-                      absent: { label: "ขาดเรียน", activeClass: "bg-rose-500 text-white" },
-                    };
-                    return (
-                      <button
-                        key={status}
-                        onClick={() => handleStatusChange(student.id, status)}
-                        className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                          isActive ? config[status].activeClass : "text-slate-400"
-                        }`}
-                      >
-                        {config[status].label}
-                      </button>
-                    );
-                  })}
+                <div className="hidden md:flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-emerald-700 text-sm font-semibold">
+                  <ClipboardCheck size={16} />
+                  {summaryRows.filter((row) => row.summary.total > 0).length} คนมีข้อมูลสะสม
                 </div>
               </div>
-            ))}
-          </div>
 
-          {/* Footer */}
-          <div className="bg-slate-50/80 px-6 py-4 border-t border-slate-100 flex justify-end">
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 text-sm"
-            >
-              <Save size={16} />
-              {isSaving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
-            </button>
-          </div>
-        </div>
+              {!isSummaryAvailable ? (
+                <div className="px-6 py-12 text-center text-slate-500 text-sm">
+                  ระบบสรุปสะสมยังไม่พร้อมใช้งานในเซิร์ฟเวอร์ตอนนี้ แต่ยังเช็คชื่อและบันทึกข้อมูลรายวันได้ตามปกติ
+                </div>
+              ) : summaryRows.every((row) => row.summary.total === 0) ? (
+                <div className="px-6 py-12 text-center text-slate-500 text-sm">
+                  ยังไม่มีข้อมูลสรุปสะสมสำหรับห้องนี้ ลองบันทึกการเช็คชื่อก่อนอย่างน้อย 1 วัน
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-100">
+                    <thead>
+                      <tr className="bg-slate-50/80">
+                        <th className="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">เลขที่</th>
+                        <th className="px-6 py-3.5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">ชื่อ-นามสกุล</th>
+                        <th className="px-4 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">มา</th>
+                        <th className="px-4 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">สาย</th>
+                        <th className="px-4 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">ลา</th>
+                        <th className="px-4 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">ขาด</th>
+                        <th className="px-4 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">บันทึกทั้งหมด</th>
+                        <th className="px-6 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">อัตรามาเรียน</th>
+                        <th className="px-6 py-3.5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">ล่าสุด</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {summaryRows.map(({ student, summary, attendanceRate }) => (
+                        <tr key={student.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="px-6 py-3 text-sm font-bold text-slate-600">{student.number}</td>
+                          <td className="px-6 py-3 text-sm font-medium text-slate-700 whitespace-nowrap">{student.name}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-flex min-w-10 justify-center rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">{summary.present}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-flex min-w-10 justify-center rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700">{summary.late}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-flex min-w-10 justify-center rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">{summary.leave}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-flex min-w-10 justify-center rounded-full bg-rose-50 px-3 py-1 text-sm font-semibold text-rose-700">{summary.absent}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm font-semibold text-slate-700">{summary.total}</td>
+                          <td className="px-6 py-3 text-center">
+                            <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">{attendanceRate}%</span>
+                          </td>
+                          <td className="px-6 py-3 text-center text-sm text-slate-500 whitespace-nowrap">
+                            {summary.lastRecordedDate ? format(new Date(`${summary.lastRecordedDate}T00:00:00`), "d MMM yyyy", { locale: th }) : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );
