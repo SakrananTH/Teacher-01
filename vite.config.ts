@@ -3,7 +3,28 @@ import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
+function getBasePath(command: string) {
+  if (command !== 'build') {
+    return '/'
+  }
+
+  const explicitBasePath = process.env.VITE_BASE_PATH?.trim()
+
+  if (explicitBasePath) {
+    return explicitBasePath.endsWith('/') ? explicitBasePath : `${explicitBasePath}/`
+  }
+
+  const repositoryName = process.env.GITHUB_REPOSITORY?.split('/')[1]
+
+  if (repositoryName) {
+    return `/${repositoryName}/`
+  }
+
+  return '/'
+}
+
+export default defineConfig(({ command }) => ({
+  base: getBasePath(command),
   plugins: [
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
@@ -19,4 +40,4 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
-})
+}))
