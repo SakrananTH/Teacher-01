@@ -6,19 +6,24 @@ create table public.assignments (
   title text not null,
   description text,
   due_date date not null default current_date,
+  attachment_url text,
+  max_score integer check (max_score is null or max_score >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 -- สร้างตารางเก็บข้อมูลการส่งการบ้าน (Assignment Submissions)
-create type public.submission_status as enum ('pending', 'submitted', 'missing');
+create type public.submission_status as enum ('pending', 'submitted', 'missing', 'late', 'needs_revision', 'reviewed', 'excused');
 
 create table public.assignment_submissions (
   id uuid primary key default gen_random_uuid(),
   assignment_id uuid not null references public.assignments(id) on delete cascade,
   student_id uuid not null references public.students(id) on delete cascade,
   status public.submission_status not null default 'pending',
+  teacher_note text,
+  score numeric(6,2) check (score is null or score >= 0),
   submitted_at timestamptz,
+  reviewed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint assignment_submissions_assignment_student_unique unique (assignment_id, student_id)

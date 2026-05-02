@@ -102,7 +102,7 @@ export const api = {
   // Attendance
   getAttendance: (date: string) => fetchAPI(`/attendance?date=${date}`),
   getAttendanceSummary: () => fetchAPI("/attendance/summary"),
-  saveAttendance: (date: string, records: Record<string, string>) =>
+  saveAttendance: (date: string, records: Record<string, string | { status: string; note?: string | null }>) =>
     fetchAPI("/attendance", {
       method: "POST",
       body: JSON.stringify({ date, records }),

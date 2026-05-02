@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { api } from "../api";
-import { Users, PiggyBank, ClipboardCheck, AlertCircle, Filter, PieChart as PieChartIcon } from "lucide-react";
+import { Users, PiggyBank, ClipboardCheck, AlertCircle, Filter, PieChart as PieChartIcon, ArrowRight, BookOpenCheck, Clock3 } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
@@ -12,6 +12,11 @@ interface Student {
   name: string;
   number: number;
   classRoom?: string;
+}
+
+interface AttendanceRecord {
+  status: "present" | "late" | "leave" | "absent";
+  note?: string | null;
 }
 
 const ALL_CLASSES = ["ป.1", "ป.2", "ป.3", "ป.4", "ป.5", "ป.6"];
@@ -24,11 +29,41 @@ const CLASS_COLORS: Record<string, string> = {
   "ป.6": "#8b5cf6",
 };
 const STUDENT_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#f43f5e", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"];
+const ACTIVITY_CARDS = [
+  {
+    title: "จัดการนักเรียน",
+    description: "เพิ่ม แก้ไข และจัดระเบียบนักเรียนตามห้องเรียน",
+    path: "/students",
+    icon: Users,
+    tone: "border-violet-100 bg-violet-50 text-violet-700",
+  },
+  {
+    title: "เช็คชื่อประจำวัน",
+    description: "บันทึกการมาเรียนแบบเร็ว พร้อมกรองและหมายเหตุรายคน",
+    path: "/attendance",
+    icon: ClipboardCheck,
+    tone: "border-emerald-100 bg-emerald-50 text-emerald-700",
+  },
+  {
+    title: "ตรวจการบ้าน",
+    description: "ดูสถานะการส่งงาน ติดตามคนค้าง และให้หมายเหตุได้ทันที",
+    path: "/assignments",
+    icon: BookOpenCheck,
+    tone: "border-indigo-100 bg-indigo-50 text-indigo-700",
+  },
+  {
+    title: "ระบบออมเงิน",
+    description: "ติดตามยอดเงินออม สรุปทั้งห้อง และดูแนวโน้มรายคน",
+    path: "/savings",
+    icon: PiggyBank,
+    tone: "border-orange-100 bg-orange-50 text-orange-700",
+  },
+];
 
 export function Home() {
   const [rawStudents, setRawStudents] = useState<Student[]>([]);
   const [rawBalances, setRawBalances] = useState<Record<string, number>>({});
-  const [rawAttendance, setRawAttendance] = useState<Record<string, string>>({});
+  const [rawAttendance, setRawAttendance] = useState<Record<string, AttendanceRecord>>({});
   const [selectedClass, setSelectedClass] = useState<string>("ทั้งหมด");
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
@@ -47,7 +82,7 @@ export function Home() {
 
         setRawStudents(students);
         setRawBalances(balances as Record<string, number>);
-        setRawAttendance(attendance as Record<string, string>);
+        setRawAttendance(attendance as Record<string, AttendanceRecord>);
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
       } finally {
@@ -71,8 +106,6 @@ export function Home() {
       (s) => selectedClass === "ทั้งหมด" || (s.classRoom || "ทั่วไป") === selectedClass
     );
 
-    const studentIds = new Set(filteredStudents.map(s => s.id));
-
     const totalStudents = filteredStudents.length;
     
     let totalSavings = 0;
@@ -82,15 +115,19 @@ export function Home() {
     
     let present = 0, absent = 0, late = 0, leave = 0;
     filteredStudents.forEach(s => {
-      const actualStatus = rawAttendance[s.id] || "present";
+      const actualStatus = rawAttendance[s.id]?.status;
       if (actualStatus === "present") present++;
       if (actualStatus === "absent") absent++;
       if (actualStatus === "late") late++;
       if (actualStatus === "leave") leave++;
     });
 
+    const checked = present + absent + late + leave;
+    const unchecked = Math.max(totalStudents - checked, 0);
+
     const chartData = [
-      { name: "มาเรียน", value: present, color: "#10b981" },
+      { name: "ยังไม่ได้เช็ค", value: unchecked, color: "#94a3b8" },
+      { name: "มา", value: present, color: "#10b981" },
       { name: "สาย", value: late, color: "#f59e0b" },
       { name: "ลา", value: leave, color: "#3b82f6" },
       { name: "ขาด", value: absent, color: "#f43f5e" },
@@ -152,7 +189,7 @@ export function Home() {
     return {
       totalStudents,
       totalSavings,
-      attendanceStats: { present, absent, late, leave },
+      attendanceStats: { present, absent, late, leave, checked, unchecked },
       chartData,
       savingsChartData
     };
@@ -228,12 +265,17 @@ export function Home() {
         >
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-emerald-600 font-bold text-sm mb-2">เข้าเรียนวันนี้</p>
+              <p className="text-emerald-600 font-bold text-sm mb-2">เช็คชื่อวันนี้</p>
               <h3 className="text-4xl font-extrabold text-slate-800 group-hover:text-emerald-700 transition-colors">
-                {dashboardData.attendanceStats.present}
+                {dashboardData.attendanceStats.checked}
                 <span className="text-lg text-slate-400 font-medium ml-2">คน</span>
               </h3>
+              <p className="mt-1 text-xs font-medium text-slate-400">
+                จากทั้งหมด {dashboardData.totalStudents} คน
+              </p>
               <div className="flex flex-wrap gap-2 mt-3">
+                <p className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">ยังไม่ได้เช็ค {dashboardData.attendanceStats.unchecked}</p>
+                <p className="text-xs font-bold text-emerald-500 bg-emerald-50 px-2 py-1 rounded-md">มา {dashboardData.attendanceStats.present}</p>
                 <p className="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded-md">ขาด {dashboardData.attendanceStats.absent}</p>
                 <p className="text-xs font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded-md">สาย {dashboardData.attendanceStats.late}</p>
                 <p className="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-md">ลา {dashboardData.attendanceStats.leave}</p>
@@ -269,23 +311,31 @@ export function Home() {
 
       {/* Analytics Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {dashboardData.chartData.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.3 }}
-            className="bg-white border-2 border-slate-100 rounded-3xl p-6"
-          >
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-500">
-                <PieChartIcon size={20} />
-              </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+          className="bg-white border-2 border-slate-100 rounded-3xl p-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-500">
+              <PieChartIcon size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800">สัดส่วนการเช็คชื่อ</h3>
+              <p className="text-sm text-slate-400">ข้อมูลสรุปสถานะการมาเรียนของนักเรียนในวันนี้</p>
+            </div>
+          </div>
+
+          {dashboardData.totalStudents === 0 ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center">
+              <ClipboardCheck className="text-slate-300" size={28} />
               <div>
-                <h3 className="font-bold text-slate-800">สัดส่วนการเข้าเรียน</h3>
-                <p className="text-sm text-slate-400">ข้อมูลสรุปสถานะการมาเรียนของนักเรียนในวันนี้</p>
+                <p className="font-semibold text-slate-500">ยังไม่มีข้อมูลนักเรียนในห้องที่เลือก</p>
+                <p className="text-sm text-slate-400">เพิ่มนักเรียนก่อน แล้วกราฟการเช็คชื่อจะแสดงที่นี่</p>
               </div>
             </div>
-            
+          ) : (
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -302,16 +352,23 @@ export function Home() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    itemStyle={{ fontWeight: 'bold' }}
+                  <Tooltip
+                    contentStyle={{ borderRadius: "16px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                    itemStyle={{ fontWeight: "bold" }}
+                    formatter={(value: number) => [`${value} คน`, "จำนวนนักเรียน"]}
                   />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '14px', fontWeight: '500' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: "14px", fontWeight: "500" }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-          </motion.div>
-        )}
+          )}
+
+          <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            {dashboardData.attendanceStats.unchecked > 0
+              ? `ยังมีนักเรียนที่ยังไม่ได้เช็ค ${dashboardData.attendanceStats.unchecked} คนในห้องที่เลือก`
+              : "เช็คชื่อนักเรียนครบแล้วสำหรับห้องที่เลือก"}
+          </div>
+        </motion.div>
 
         {dashboardData.savingsChartData.length > 0 && (
           <motion.div
@@ -358,6 +415,79 @@ export function Home() {
           </motion.div>
         )}
       </div>
+
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800">กิจกรรมหลักของห้องเรียน</h3>
+          <p className="mt-1 text-sm text-slate-500">ทางลัดสำหรับงานประจำวันของครูประจำชั้นในแต่ละระบบ</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {ACTIVITY_CARDS.map((card, index) => {
+            const Icon = card.icon;
+
+            return (
+              <motion.button
+                key={card.path}
+                type="button"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.45 + index * 0.05 }}
+                onClick={() => navigate(card.path)}
+                className="group rounded-3xl border-2 border-slate-100 bg-white p-5 text-left transition-all hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${card.tone}`}>
+                      <Icon size={22} />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-800">{card.title}</h4>
+                      <p className="mt-1 text-sm text-slate-500">{card.description}</p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                        {card.path === "/students" && (
+                          <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">{dashboardData.totalStudents} คนในห้องที่เลือก</span>
+                        )}
+                        {card.path === "/attendance" && (
+                          <>
+                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">เช็คแล้ว {dashboardData.attendanceStats.checked} คน</span>
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">ค้างเช็ค {dashboardData.attendanceStats.unchecked} คน</span>
+                          </>
+                        )}
+                        {card.path === "/assignments" && (
+                          <span className="rounded-full bg-indigo-50 px-3 py-1 text-indigo-700">ติดตามงานและสถานะการส่ง</span>
+                        )}
+                        {card.path === "/savings" && (
+                          <span className="rounded-full bg-orange-50 px-3 py-1 text-orange-700">รวมเงินออม {dashboardData.totalSavings.toLocaleString()} บาท</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="mt-1 text-slate-300 transition-transform group-hover:translate-x-1 group-hover:text-slate-500" size={20} />
+                </div>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
+      {dashboardData.totalStudents > 0 && dashboardData.attendanceStats.unchecked > 0 && (
+        <div className="flex items-start gap-4 rounded-2xl border border-amber-100 bg-amber-50 p-6">
+          <Clock3 className="mt-0.5 shrink-0 text-amber-500" size={24} />
+          <div>
+            <h4 className="mb-1 font-bold text-amber-800">ยังมีงานที่ควรทำต่อวันนี้</h4>
+            <p className="text-sm text-amber-700/80 mb-3">
+              นักเรียนในห้อง {selectedClass} ยังไม่ได้เช็คชื่อ {dashboardData.attendanceStats.unchecked} คน ควรเข้าไปอัปเดตในระบบเช็คชื่อเพื่อให้ข้อมูลหน้าแรกและรายงานสะสมตรงกัน
+            </p>
+            <button
+              onClick={() => navigate("/attendance")}
+              className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-amber-600"
+            >
+              ไปที่ระบบเช็คชื่อ
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Alert Section if something needs attention */}
       {dashboardData.totalStudents === 0 && (

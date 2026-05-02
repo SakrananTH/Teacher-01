@@ -336,14 +336,17 @@ app.get("/api/attendance", async (c)=>{
       return auth.error;
     }
     const { user, supabaseAdmin } = auth;
-    const { data, error } = await supabaseAdmin.from("attendance_records").select("student_id, status").eq("owner_user_id", user.id).eq("attendance_date", date);
+    const { data, error } = await supabaseAdmin.from("attendance_records").select("student_id, status, note").eq("owner_user_id", user.id).eq("attendance_date", date);
     if (error) {
       return c.json({
         error: error.message
       }, 500);
     }
     const mapped = (data || []).reduce((acc, row)=>{
-      acc[row.student_id] = row.status;
+      acc[row.student_id] = {
+        status: row.status,
+        note: row.note
+      };
       return acc;
     }, {});
     return c.json(mapped);
@@ -404,12 +407,46 @@ app.post("/api/attendance", async (c)=>{
       return auth.error;
     }
     const { user, supabaseAdmin } = auth;
-    const rows = Object.entries(records || {}).map(([studentId, status])=>({
+    const allowedStatuses = new Set([
+      "present",
+      "late",
+      "leave",
+      "absent"
+    ]);
+    const rows = [];
+    const studentIdsToClear = [];
+    for (const [studentId, value] of Object.entries(records || {})) {
+      const recordValue = typeof value === "string" ? {
+        status: value,
+        note: null
+      } : value || {};
+      const status = typeof recordValue.status === "string" ? recordValue.status : null;
+      const note = typeof recordValue.note === "string" ? recordValue.note.trim() : null;
+      if (!status || status === "unchecked") {
+        studentIdsToClear.push(studentId);
+        continue;
+      }
+      if (!allowedStatuses.has(status)) {
+        return c.json({
+          error: `Invalid attendance status: ${status}`
+        }, 400);
+      }
+      rows.push({
         owner_user_id: user.id,
         student_id: studentId,
         attendance_date: date,
-        status
-      }));
+        status,
+        note: note || null
+      });
+    }
+    if (studentIdsToClear.length > 0) {
+      const { error: deleteError } = await supabaseAdmin.from("attendance_records").delete().eq("owner_user_id", user.id).eq("attendance_date", date).in("student_id", studentIdsToClear);
+      if (deleteError) {
+        return c.json({
+          error: deleteError.message
+        }, 400);
+      }
+    }
     if (rows.length > 0) {
       const { error } = await supabaseAdmin.from("attendance_records").upsert(rows, {
         onConflict: "owner_user_id,student_id,attendance_date"
