@@ -692,7 +692,7 @@ export function Assignments() {
         
         {/* Class Selector */}
         <div className="w-[200px]">
-          <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+          <Select value={selectedClassId} onValueChange={setSelectedClassId} disabled={classrooms.length === 0}>
             <SelectTrigger>
               <SelectValue placeholder="เลือกห้องเรียน" />
             </SelectTrigger>
@@ -703,7 +703,7 @@ export function Assignments() {
                 </SelectItem>
               ))}
               {classrooms.length === 0 && (
-                <SelectItem value="" disabled>ไม่มีข้อมูลห้องเรียน</SelectItem>
+                <SelectItem value="__no-classrooms__" disabled>ไม่มีข้อมูลห้องเรียน</SelectItem>
               )}
             </SelectContent>
           </Select>
