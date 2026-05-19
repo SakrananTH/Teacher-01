@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "motion/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import { useNavigate } from "react-router";
 import { 
   Mail, 
@@ -253,7 +253,7 @@ export function Login() {
                     <input
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
                       className="pl-11 w-full py-3 bg-white border border-slate-200 rounded-xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none text-slate-800 placeholder:text-slate-300 font-medium text-sm"
                       placeholder="เช่น คุณครูใจดี นามสมมติ"
                     />
@@ -281,7 +281,7 @@ export function Login() {
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                     required
                     className="pl-11 w-full py-3 bg-white border border-slate-200 rounded-xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none text-slate-800 placeholder:text-slate-300 font-medium text-sm"
                     placeholder="teacher@example.com"
@@ -302,7 +302,7 @@ export function Login() {
                 <input
                   type="password"
                   value={isRecovery ? recoveryPassword : password}
-                  onChange={(e) => isRecovery ? setRecoveryPassword(e.target.value) : setPassword(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => isRecovery ? setRecoveryPassword(e.target.value) : setPassword(e.target.value)}
                   required
                   minLength={6}
                   className="pl-11 w-full py-3 bg-white border border-slate-200 rounded-xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none text-slate-800 placeholder:text-slate-300 font-medium text-sm"

@@ -126,24 +126,46 @@ export function MilkTracking() {
     if (!user) return;
     setSaving(true);
     try {
-      const upsertData = Object.values(records)
-        .filter(record => record.status !== 'none' || record.note !== '')
-        .map((record) => ({
-          ...(record.id ? { id: record.id } : {}),
-          owner_user_id: user.id,
-          student_id: record.student_id,
-          record_date: date,
-          is_drunk: record.status === 'drank', // Fallback for the old column
-          status: record.status, // The new column
-          note: record.note,
-        }));
+      const validRecords = Object.values(records).filter(
+        (record) => record.status !== 'none' || record.note !== ''
+      );
 
-      if (upsertData.length > 0) {
+      const toUpdate = validRecords.filter(r => r.id).map(record => ({
+        id: record.id,
+        owner_user_id: user.id,
+        student_id: record.student_id,
+        record_date: date,
+        is_drunk: record.status === 'drank',
+        status: record.status,
+        note: record.note,
+      }));
+
+      const toInsert = validRecords.filter(r => !r.id).map(record => ({
+        owner_user_id: user.id,
+        student_id: record.student_id,
+        record_date: date,
+        is_drunk: record.status === 'drank',
+        status: record.status,
+        note: record.note,
+      }));
+
+      if (toUpdate.length > 0) {
         const { error } = await supabase
           .from("milk_records")
-          .upsert(upsertData, { onConflict: "owner_user_id, student_id, record_date" });
+          .upsert(toUpdate, { onConflict: "id" });
 
         if (error) throw error;
+      }
+
+      if (toInsert.length > 0) {
+        const { error } = await supabase
+          .from("milk_records")
+          .insert(toInsert);
+
+        if (error) throw error;
+      }
+
+      if (toUpdate.length > 0 || toInsert.length > 0) {
         toast.success("บันทึกข้อมูลดื่มนมสำเร็จ");
         await fetchStudentsAndRecords();
       } else {
@@ -188,7 +210,7 @@ export function MilkTracking() {
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">วันที่บันทึก</p>
             <div className="relative">
               <span className="font-bold text-slate-700 block">{formatThaiDate(date)}</span>
-              <input
+              <Input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}

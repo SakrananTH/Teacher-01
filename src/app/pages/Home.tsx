@@ -1,11 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, ChangeEvent } from "react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { api } from "../api";
-import { Users, PiggyBank, ClipboardCheck, AlertCircle, Filter, PieChart as PieChartIcon, ArrowRight, BookOpenCheck, Clock3 } from "lucide-react";
+import { supabase } from "../lib/supabase";
+import { Users, PiggyBank, ClipboardCheck, AlertCircle, Filter, PieChart as PieChartIcon, ArrowRight, BookOpenCheck, Clock3, Download } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { toast } from "sonner";
+import { Button } from "../components/ui/button";
+import { exportToExcel } from "../../utils/exportExcel";
 
 interface Student {
   id: string;
@@ -210,6 +214,121 @@ export function Home() {
 
   const currentDate = format(new Date(), "d MMMM yyyy", { locale: th });
 
+  const handleExportSystemSummary = async () => {
+    const loadingToast = toast.loading("กำลังเตรียมข้อมูลสรุปรายเดือน...");
+    
+    try {
+      // ดึงข้อมูลสรุปการเช็คชื่อสะสมทั้งหมดจากเซิร์ฟเวอร์
+      const summaryData = await api.getAttendanceSummary();
+
+      // ดึงข้อมูลจากระบบอื่นๆ เพิ่มเติม (ส่วนสูงน้ำหนัก, แปรงฟัน, ดื่มนม, การบ้าน)
+      const [
+        { data: healthData },
+        { data: toothbrushData },
+        { data: milkData },
+        { data: assignmentsData }
+      ] = await Promise.all([
+        supabase.from("health_measurements").select("student_id, height_cm, weight_kg, record_date").order("record_date", { ascending: false }),
+        supabase.from("toothbrush_records").select("student_id, status"),
+        supabase.from("milk_records").select("student_id, status, is_drunk"),
+        supabase.from("assignment_submissions").select("student_id, status")
+      ]);
+
+      const latestHealth: Record<string, any> = {};
+      healthData?.forEach(record => {
+        if (!latestHealth[record.student_id]) latestHealth[record.student_id] = record; // เก็บแค่ข้อมูลล่าสุด
+      });
+
+      const toothbrushSummary: Record<string, { brushed: number }> = {};
+      toothbrushData?.forEach(record => {
+        if (!toothbrushSummary[record.student_id]) toothbrushSummary[record.student_id] = { brushed: 0 };
+        if (record.status === "brushed") toothbrushSummary[record.student_id].brushed++;
+      });
+
+      const milkSummary: Record<string, { drank: number }> = {};
+      milkData?.forEach(record => {
+        if (!milkSummary[record.student_id]) milkSummary[record.student_id] = { drank: 0 };
+        const status = record.status || (record.is_drunk ? 'drank' : 'none');
+        if (status === "drank") milkSummary[record.student_id].drank++;
+      });
+
+      const assignmentSummary: Record<string, { submitted: number; pending: number }> = {};
+      assignmentsData?.forEach(record => {
+        if (!assignmentSummary[record.student_id]) assignmentSummary[record.student_id] = { submitted: 0, pending: 0 };
+        if (["submitted", "late", "needs_revision", "reviewed"].includes(record.status)) {
+          assignmentSummary[record.student_id].submitted++;
+        } else if (["pending", "missing"].includes(record.status)) {
+          assignmentSummary[record.student_id].pending++;
+        }
+      });
+
+      const filteredStudents = rawStudents.filter(
+        (s) => selectedClass === "ทั้งหมด" || (s.classRoom || "ทั่วไป") === selectedClass
+      ).sort((a, b) => {
+        const classA = a.classRoom || "ทั่วไป";
+        const classB = b.classRoom || "ทั่วไป";
+        if (classA !== classB) return classA.localeCompare(classB, 'th');
+        return a.number - b.number;
+      }); // จัดเรียงตามห้องเรียนก่อน แล้วตามด้วยเลขที่
+
+      const excelData: any[] = filteredStudents.map((s) => {
+        const balance = Number(rawBalances[s.id]) || 0;
+        const summary = summaryData[s.id] || { present: 0, late: 0, leave: 0, absent: 0 };
+
+        const health = latestHealth[s.id];
+        const h = health?.height_cm || 0;
+        const w = health?.weight_kg || 0;
+        const bmi = h && w ? (w / Math.pow(h / 100, 2)).toFixed(2) : "-";
+        
+        const tb = toothbrushSummary[s.id] || { brushed: 0 };
+        const mk = milkSummary[s.id] || { drank: 0 };
+        const asg = assignmentSummary[s.id] || { submitted: 0, pending: 0 };
+
+        return {
+          'เลขที่': s.number,
+          'ชื่อ-นามสกุล': s.name,
+          'ชั้น/ห้อง': s.classRoom || "ทั่วไป",
+          'มาเรียน (ครั้ง)': summary.present || 0,
+          'ลา (ครั้ง)': summary.leave || 0,
+          'ขาด (ครั้ง)': summary.absent || 0,
+          'สาย (ครั้ง)': summary.late || 0,
+          'แปรงฟันแล้ว (ครั้ง)': tb.brushed,
+          'ดื่มนมแล้ว (ครั้ง)': mk.drank,
+          'ส่งงานแล้ว (ชิ้น)': asg.submitted,
+          'ค้างงาน (ชิ้น)': asg.pending,
+          'ส่วนสูงล่าสุด (ซม.)': h || "-",
+          'น้ำหนักล่าสุด (กก.)': w || "-",
+          'BMI': bmi,
+          'ยอดเงินออม (บาท)': balance,
+          'คะแนนความประพฤติ': '' // เว้นไว้สำหรับกรอก
+        };
+      });
+
+      // ลายเซ็นด้านล่าง (ไม่ใช้ Spacebar เคาะเว้นวรรคแล้ว)
+      excelData.push(
+        {},
+        {},
+        { 
+          'ชั้น/ห้อง': 'ลงชื่อ......................................................ครูประจำชั้น', 
+          'ส่วนสูงล่าสุด (ซม.)': 'ลงชื่อ......................................................ผู้อำนวยการโรงเรียน',
+        },
+        { 
+          'ชั้น/ห้อง': '(......................................................)', 
+          'ส่วนสูงล่าสุด (ซม.)': '(......................................................)',
+        }
+      );
+
+      const currentMonth = format(new Date(), "MMMM_yyyy", { locale: th });
+      exportToExcel(excelData, `สรุปภาพรวมระบบ_รายเดือน_${selectedClass}_${currentMonth}`);
+      
+      toast.dismiss(loadingToast);
+      toast.success("ส่งออกไฟล์ Excel สำเร็จ");
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error("ส่งออกข้อมูลล้มเหลว");
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Header Overview */}
@@ -218,18 +337,27 @@ export function Home() {
           <h1 className="text-2xl font-bold text-slate-800">ภาพรวมระบบ</h1>
           <p className="text-slate-500 mt-1">ข้อมูลสรุปประจำวันที่ {currentDate}</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 w-full sm:w-48 flex items-center focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-400 transition-all">
-          <Filter size={16} className="text-slate-400 mr-2" />
-          <select
-            value={selectedClass}
-            onChange={(e) => setSelectedClass(e.target.value)}
-            title="กรองตามห้องเรียน"
-            className="w-full bg-transparent border-none outline-none text-slate-700 font-medium text-sm cursor-pointer"
+        <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
+          <Button 
+            onClick={handleExportSystemSummary}
+            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm h-[42px]"
           >
-            {uniqueClasses.map(c => (
-              <option key={c} value={c}>{c === "ทั้งหมด" ? "ทุกห้องเรียน" : c}</option>
-            ))}
-          </select>
+            <Download size={16} className="mr-2" />
+            ส่งออกภาพรวม (Excel)
+          </Button>
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 w-full sm:w-48 flex items-center focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-400 transition-all">
+            <Filter size={16} className="text-slate-400 mr-2" />
+            <select
+              value={selectedClass}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedClass(e.target.value)}
+              title="กรองตามห้องเรียน"
+              className="w-full bg-transparent border-none outline-none text-slate-700 font-medium text-sm cursor-pointer"
+            >
+              {uniqueClasses.map(c => (
+                <option key={c} value={c}>{c === "ทั้งหมด" ? "ทุกห้องเรียน" : c}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

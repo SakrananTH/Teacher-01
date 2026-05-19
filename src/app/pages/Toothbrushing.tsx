@@ -3,7 +3,8 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Activity, Calendar, Loader2, Save, Search } from "lucide-react";
+import { th } from "date-fns/locale";
+import { Smile, Calendar, Loader2, Save, Search, CheckCircle2, XCircle, UserMinus } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 
@@ -14,48 +15,26 @@ interface Student {
   classroom_id: string;
 }
 
-interface HealthRecord {
+export type ToothbrushStatus = 'brushed' | 'not_brushed' | 'absent' | 'none';
+
+interface ToothbrushRecord {
   id: string;
   student_id: string;
-  height_cm: number | string;
-  weight_kg: number | string;
+  status: ToothbrushStatus;
   note: string;
 }
-
-const calculateBMI = (heightCm: number | string, weightKg: number | string): number | null => {
-  if (!heightCm || !weightKg) return null;
-  const heightM = Number(heightCm) / 100;
-  const weight = Number(weightKg);
-  if (heightM <= 0 || weight <= 0) return null;
-  return Number((weight / (heightM * heightM)).toFixed(2));
-};
-
-const getBMIStatus = (bmi: number | null): { text: string; color: string } => {
-  if (bmi === null) return { text: "-", color: "text-slate-400" };
-  if (bmi < 18.5) return { text: "น้ำหนักน้อย", color: "text-blue-500 font-medium" };
-  if (bmi >= 18.5 && bmi <= 22.9) return { text: "ปกติ", color: "text-emerald-500 font-bold" };
-  if (bmi >= 23 && bmi <= 24.9) return { text: "ท้วม", color: "text-amber-500 font-medium" };
-  if (bmi >= 25 && bmi <= 29.9) return { text: "อ้วน", color: "text-orange-500 font-bold" };
-  return { text: "อ้วนมาก", color: "text-rose-600 font-bold" };
-};
-
-const getCompletionStatus = (heightCm: number | string, weightKg: number | string): { label: string; badgeClass: string } => {
-  if (heightCm === "" && weightKg === "") return { label: "ยังไม่ได้กรอก", badgeClass: "bg-slate-100 text-slate-500" };
-  if (heightCm !== "" && weightKg !== "") return { label: "กรอกแล้ว", badgeClass: "bg-emerald-100 text-emerald-700" };
-  return { label: "ข้อมูลไม่ครบ", badgeClass: "bg-amber-100 text-amber-700" };
-};
 
 const formatThaiDate = (dateStr: string) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
+  return `วัน${format(d, "EEEE", { locale: th })}ที่ ${format(d, "d MMMM", { locale: th })} ${d.getFullYear() + 543}`;
 };
 
-export function HealthMeasurements() {
+export function Toothbrushing() {
   const { user } = useAuth();
   const [date, setDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [students, setStudents] = useState<Student[]>([]);
-  const [records, setRecords] = useState<Record<string, HealthRecord>>({});
+  const [records, setRecords] = useState<Record<string, ToothbrushRecord>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -74,19 +53,18 @@ export function HealthMeasurements() {
       setStudents(studentsData || []);
 
       const { data: recordsData, error: recordsError } = await supabase
-        .from("health_measurements")
+        .from("toothbrush_records")
         .select("*")
         .eq("record_date", date);
 
       if (recordsError) throw recordsError;
 
-      const recordsMap: Record<string, HealthRecord> = {};
+      const recordsMap: Record<string, ToothbrushRecord> = {};
       recordsData?.forEach((record) => {
         recordsMap[record.student_id] = {
           id: record.id,
           student_id: record.student_id,
-          height_cm: record.height_cm || "",
-          weight_kg: record.weight_kg || "",
+          status: (record.status as ToothbrushStatus) || 'none',
           note: record.note || "",
         };
       });
@@ -103,12 +81,22 @@ export function HealthMeasurements() {
     fetchStudentsAndRecords();
   }, [user, date]);
 
-  const handleRecordChange = (studentId: string, field: keyof HealthRecord, value: string | number) => {
+  const handleStatusChange = (studentId: string, status: ToothbrushStatus) => {
     setRecords((prev) => {
-      const existing = prev[studentId] || { id: "", student_id: studentId, height_cm: "", weight_kg: "", note: "" };
+      const existing = prev[studentId] || { id: "", student_id: studentId, status: "none", note: "" };
       return {
         ...prev,
-        [studentId]: { ...existing, [field]: value },
+        [studentId]: { ...existing, status },
+      };
+    });
+  };
+
+  const handleNoteChange = (studentId: string, note: string) => {
+    setRecords((prev) => {
+      const existing = prev[studentId] || { id: "", student_id: studentId, status: "none", note: "" };
+      return {
+        ...prev,
+        [studentId]: { ...existing, note },
       };
     });
   };
@@ -118,7 +106,7 @@ export function HealthMeasurements() {
     setSaving(true);
     try {
       const validRecords = Object.values(records).filter(
-        (record) => record.height_cm !== "" || record.weight_kg !== "" || record.note !== ""
+        (record) => record.status !== 'none' || record.note !== ''
       );
 
       const toUpdate = validRecords.filter(r => r.id).map(record => ({
@@ -126,8 +114,7 @@ export function HealthMeasurements() {
         owner_user_id: user.id,
         student_id: record.student_id,
         record_date: date,
-        height_cm: record.height_cm === "" ? null : Number(record.height_cm),
-        weight_kg: record.weight_kg === "" ? null : Number(record.weight_kg),
+        status: record.status,
         note: record.note,
       }));
 
@@ -135,14 +122,13 @@ export function HealthMeasurements() {
         owner_user_id: user.id,
         student_id: record.student_id,
         record_date: date,
-        height_cm: record.height_cm === "" ? null : Number(record.height_cm),
-        weight_kg: record.weight_kg === "" ? null : Number(record.weight_kg),
+        status: record.status,
         note: record.note,
       }));
 
       if (toUpdate.length > 0) {
         const { error } = await supabase
-          .from("health_measurements")
+          .from("toothbrush_records")
           .upsert(toUpdate, { onConflict: "id" });
 
         if (error) throw error;
@@ -150,14 +136,14 @@ export function HealthMeasurements() {
 
       if (toInsert.length > 0) {
         const { error } = await supabase
-          .from("health_measurements")
+          .from("toothbrush_records")
           .insert(toInsert);
 
         if (error) throw error;
       }
 
       if (toUpdate.length > 0 || toInsert.length > 0) {
-        toast.success("บันทึกข้อมูลส่วนสูง-น้ำหนักสำเร็จ");
+        toast.success("บันทึกข้อมูลการแปรงฟันสำเร็จ");
         await fetchStudentsAndRecords();
       } else {
         toast.info("ไม่มีข้อมูลให้บันทึก");
@@ -176,18 +162,24 @@ export function HealthMeasurements() {
       s.student_no.toString().includes(searchQuery)
   );
 
+  // Calculate summaries
+  const totalStudents = students.length;
+  const brushedCount = Object.values(records).filter(r => r.status === 'brushed').length;
+  const notBrushedCount = Object.values(records).filter(r => r.status === 'not_brushed').length;
+  const absentCount = Object.values(records).filter(r => r.status === 'absent').length;
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Activity className="text-rose-500" />
-            ระบบวัดส่วนสูง-น้ำหนัก
+            <Smile className="text-teal-500" />
+            ระบบบันทึกการแปรงฟัน
           </h1>
-          <p className="text-slate-500 mt-1">บันทึกข้อมูลสุขภาพของนักเรียน</p>
+          <p className="text-slate-500 mt-1">บันทึกการแปรงฟันของนักเรียนในแต่ละวัน</p>
         </div>
         <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-full sm:w-auto">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-50 text-rose-600">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-teal-50 text-teal-600">
             <Calendar size={20} />
           </div>
           <div className="flex-1 sm:pr-4">
@@ -205,6 +197,26 @@ export function HealthMeasurements() {
         </div>
       </div>
 
+      {/* Summary Dashboard */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
+          <p className="text-sm font-bold text-slate-500 mb-1">นักเรียนทั้งหมด</p>
+          <p className="text-2xl font-bold text-slate-800">{totalStudents} <span className="text-sm font-medium text-slate-500">คน</span></p>
+        </div>
+        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm flex flex-col justify-center">
+          <p className="text-sm font-bold text-emerald-600 mb-1 flex items-center gap-1"><CheckCircle2 size={16} /> แปรงแล้ว</p>
+          <p className="text-2xl font-bold text-emerald-700">{brushedCount} <span className="text-sm font-medium text-emerald-600/70">คน</span></p>
+        </div>
+        <div className="bg-rose-50 p-4 rounded-2xl border border-rose-100 shadow-sm flex flex-col justify-center">
+          <p className="text-sm font-bold text-rose-600 mb-1 flex items-center gap-1"><XCircle size={16} /> ไม่แปรง</p>
+          <p className="text-2xl font-bold text-rose-700">{notBrushedCount} <span className="text-sm font-medium text-rose-600/70">คน</span></p>
+        </div>
+        <div className="bg-slate-100 p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
+          <p className="text-sm font-bold text-slate-600 mb-1 flex items-center gap-1"><UserMinus size={16} /> ขาดเรียน</p>
+          <p className="text-2xl font-bold text-slate-700">{absentCount} <span className="text-sm font-medium text-slate-500">คน</span></p>
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col relative">
         <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative w-full sm:max-w-xs">
@@ -216,7 +228,7 @@ export function HealthMeasurements() {
               className="pl-10 bg-white"
             />
           </div>
-          <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 hidden sm:flex">
+          <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 hidden sm:flex">
             {saving ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Save size={18} className="mr-2" />}
             บันทึกข้อมูล
           </Button>
@@ -225,82 +237,69 @@ export function HealthMeasurements() {
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-12 flex flex-col items-center justify-center text-slate-400">
-              <Loader2 className="w-8 h-8 animate-spin mb-4 text-rose-500" />
+              <Loader2 className="w-8 h-8 animate-spin mb-4 text-teal-500" />
               <p>กำลังโหลดข้อมูล...</p>
             </div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[900px]">
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                   <th className="py-4 px-4 font-semibold w-16 text-center">เลขที่</th>
-                  <th className="py-4 px-4 font-semibold w-48">ชื่อ-นามสกุล</th>
-                  <th className="py-4 px-4 font-semibold w-28 text-center">สถานะ</th>
-                  <th className="py-4 px-4 font-semibold w-36">ส่วนสูง</th>
-                  <th className="py-4 px-4 font-semibold w-36">น้ำหนัก</th>
-                  <th className="py-4 px-4 font-semibold w-20 text-center">BMI</th>
-                  <th className="py-4 px-4 font-semibold w-28 text-center">แปลผล</th>
-                  <th className="py-4 px-4 font-semibold min-w-[120px]">หมายเหตุ</th>
+                  <th className="py-4 px-4 font-semibold w-64">ชื่อ-นามสกุล</th>
+                  <th className="py-4 px-4 font-semibold w-[320px] text-center">สถานะการแปรงฟัน</th>
+                  <th className="py-4 px-4 font-semibold">หมายเหตุ</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredStudents.length > 0 ? (
                   filteredStudents.map((student) => {
                     const record = records[student.id];
-                    const h = record?.height_cm ?? "";
-                    const w = record?.weight_kg ?? "";
-                    const status = getCompletionStatus(h, w);
-                    const bmi = calculateBMI(h, w);
-                    const bmiStatus = getBMIStatus(bmi);
+                    const status = record?.status || 'none';
 
                     return (
                       <tr key={student.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                         <td className="py-3 px-4 text-slate-500 font-medium text-center">{student.student_no}</td>
                         <td className="py-3 px-4 text-slate-800 font-medium whitespace-nowrap">{student.full_name}</td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold ${status.badgeClass}`}>
-                            {status.label}
-                          </span>
-                        </td>
                         <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.1"
-                              placeholder="เช่น 120"
-                              value={h}
-                              onChange={(e) => handleRecordChange(student.id, "height_cm", e.target.value)}
-                              className="w-20 text-center bg-transparent border-slate-200 focus:bg-white h-9 font-medium"
-                            />
-                            <span className="text-sm text-slate-500 font-medium">ซม.</span>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleStatusChange(student.id, 'brushed')}
+                              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-all border ${
+                                status === 'brushed' 
+                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-300 shadow-sm' 
+                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <CheckCircle2 size={16} /> แปรงแล้ว
+                            </button>
+                            <button
+                              onClick={() => handleStatusChange(student.id, 'not_brushed')}
+                              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-all border ${
+                                status === 'not_brushed' 
+                                  ? 'bg-rose-100 text-rose-700 border-rose-300 shadow-sm' 
+                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <XCircle size={16} /> ไม่แปรง
+                            </button>
+                            <button
+                              onClick={() => handleStatusChange(student.id, 'absent')}
+                              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-all border ${
+                                status === 'absent' 
+                                  ? 'bg-slate-200 text-slate-700 border-slate-400 shadow-sm' 
+                                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <UserMinus size={16} /> ขาด
+                            </button>
                           </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.1"
-                              placeholder="เช่น 25.5"
-                              value={w}
-                              onChange={(e) => handleRecordChange(student.id, "weight_kg", e.target.value)}
-                              className="w-20 text-center bg-transparent border-slate-200 focus:bg-white h-9 font-medium"
-                            />
-                            <span className="text-sm text-slate-500 font-medium">กก.</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="font-bold text-slate-700 text-sm">{bmi !== null ? bmi : "-"}</span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`text-[13px] ${bmiStatus.color}`}>{bmiStatus.text}</span>
                         </td>
                         <td className="py-3 px-4">
                           <Input
                             placeholder="เพิ่มหมายเหตุ..."
                             value={record?.note || ""}
-                            onChange={(e) => handleRecordChange(student.id, "note", e.target.value)}
-                            className="bg-transparent border-slate-200 focus:bg-white h-9 text-sm w-full min-w-[120px]"
+                            onChange={(e) => handleNoteChange(student.id, e.target.value)}
+                            className="bg-transparent border-slate-200 focus:bg-white h-10 text-sm"
                           />
                         </td>
                       </tr>
@@ -308,7 +307,7 @@ export function HealthMeasurements() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-500">
+                    <td colSpan={4} className="py-12 text-center text-slate-500">
                       ไม่พบข้อมูลนักเรียน
                     </td>
                   </tr>
@@ -318,9 +317,9 @@ export function HealthMeasurements() {
           )}
         </div>
         
-        {/* Bottom Save Button - Sticky to bottom of table container */}
+        {/* Bottom Save Button */}
         <div className="sticky bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white/90 backdrop-blur-sm flex justify-end">
-          <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 shadow-md h-11 px-8">
+          <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 shadow-md h-11 px-8">
             {saving ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Save size={18} className="mr-2" />}
             <span className="font-bold">บันทึกข้อมูลทั้งหมด</span>
           </Button>

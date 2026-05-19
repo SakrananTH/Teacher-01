@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import { api } from "../api";
 import { toast } from "sonner";
 import { Trash2, Plus, Users, X, Search, UserRound, Hash, Edit2 } from "lucide-react";
@@ -111,7 +111,7 @@ export function Students() {
 
   const filtered = students.filter(
     (s) => {
-      const matchSearch = s.name.includes(search) || s.number.toString() === search;
+      const matchSearch = search.trim() === '' || s.name.toLowerCase().includes(search.toLowerCase()) || s.number.toString().includes(search);
       const matchClass = selectedClass === "" || (s.classRoom || "ป.1") === selectedClass;
       return matchSearch && matchClass;
     }
@@ -188,7 +188,7 @@ export function Students() {
                     min="1"
                     required
                     value={studentForm.number}
-                    onChange={(e) => setStudentForm({ ...studentForm, number: e.target.value })}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setStudentForm({ ...studentForm, number: e.target.value })}
                     className="w-full border border-slate-200 rounded-xl h-11 pl-9 pr-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-medium bg-slate-50 focus:bg-white"
                     placeholder="เช่น 1"
                   />
@@ -205,7 +205,7 @@ export function Students() {
                     title="เลือกระดับชั้น"
                     aria-label="เลือกระดับชั้น"
                     value={studentForm.classRoom || "ป.1"}
-                    onChange={(e) => setStudentForm({ ...studentForm, classRoom: e.target.value })}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setStudentForm({ ...studentForm, classRoom: e.target.value })}
                     className="w-full border border-slate-200 rounded-xl h-11 pl-9 pr-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-medium bg-slate-50 focus:bg-white cursor-pointer"
                   >
                     <option value="" disabled hidden>เลือกระดับชั้น</option>
@@ -226,7 +226,7 @@ export function Students() {
                   <select
                     title="คำนำหน้า"
                     value={studentForm.prefix}
-                    onChange={(e) => setStudentForm({ ...studentForm, prefix: e.target.value })}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setStudentForm({ ...studentForm, prefix: e.target.value })}
                     className="w-24 border border-slate-200 rounded-xl h-11 px-2 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-medium bg-slate-50 focus:bg-white cursor-pointer"
                   >
                     <option value="">(ไม่มี)</option>
@@ -239,7 +239,7 @@ export function Students() {
                       type="text"
                       required
                       value={studentForm.name}
-                      onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setStudentForm({ ...studentForm, name: e.target.value })}
                       className="w-full border border-slate-200 rounded-xl h-11 pl-9 pr-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-medium bg-slate-50 focus:bg-white"
                       placeholder="ชื่อ-นามสกุล ของนักเรียน"
                     />
@@ -265,14 +265,14 @@ export function Students() {
             type="text"
             placeholder="ค้นหาชื่อ หรือเลขที่..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
             className="border-none bg-transparent outline-none text-slate-700 font-medium flex-1 w-full placeholder:text-slate-300 text-sm"
           />
         </div>
         <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 w-full sm:w-48 flex items-center focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-400 transition-all">
           <select
             value={selectedClass}
-            onChange={(e) => setSelectedClass(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedClass(e.target.value)}
             title="กรองตามห้องเรียน"
             className="w-full bg-transparent border-none outline-none text-slate-700 font-medium text-sm cursor-pointer"
           >

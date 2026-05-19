@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -29,7 +29,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Badge } from "../components/ui/badge";
 import {
-  AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
   Copy,
@@ -240,7 +239,7 @@ export function Assignments() {
 
       if (error) throw error;
 
-      const newAllSubmissions: Record<string, Record<string, string>> = {};
+      const newAllSubmissions: Record<string, Record<string, SubmissionStatus>> = {};
       
       studentsInClass.forEach(s => {
         newAllSubmissions[s.id] = {};
@@ -285,7 +284,7 @@ export function Assignments() {
         setSelectedClassId(classroomsData[0].id);
       }
     } catch (error: any) {
-      toast.error("ดึงข้อมูลนักเรียนและห้องเรียนล้มเหล໗", { description: error.message });
+      toast.error("ดึงข้อมูลนักเรียนและห้องเรียนล้มเหลว", { description: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -307,7 +306,7 @@ export function Assignments() {
         setSelectedAssignmentId("");
       }
     } catch (error: any) {
-      toast.error("ดึงข้อมูลการบ้านล้มแหลว", { description: error.message });
+      toast.error("ดึงข้อมูลการบ้านล้มเหลว", { description: error.message });
     }
   };
 
@@ -328,7 +327,7 @@ export function Assignments() {
       setSubmissionDrafts(drafts);
       setSavedSubmissionDrafts(cloneDrafts(drafts));
     } catch (error: any) {
-      toast.error("ดึงข้อมูลการส๋งงานล้มแหลว", { description: error.message });
+      toast.error("ดึงข้อมูลการส่งงานล้มเหลว", { description: error.message });
     }
   };
 
@@ -356,9 +355,9 @@ export function Assignments() {
       setAssignments([data, ...assignments]);
       setNewAssignmentForm({ ...ASSIGNMENT_DEFAULT_FORM });
       setSelectedAssignmentId(data.id);
-      toast.success("สร้างการบ้านสำเร็ฌ");
+      toast.success("สร้างการบ้านสำเร็จ");
     } catch (error: any) {
-      toast.error("สร้างการบ้านล้มแหลว", { description: error.message });
+      toast.error("สร้างการบ้านล้มเหลว", { description: error.message });
     }
   };
 
@@ -733,7 +732,7 @@ export function Assignments() {
                         id="topic" 
                         placeholder="เช่น แบบฝึกหัดภาษาไทย หน้า 20" 
                         value={newAssignmentForm.title}
-                        onChange={(e) => setNewAssignmentForm((prev) => ({ ...prev, title: e.target.value }))}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewAssignmentForm((prev) => ({ ...prev, title: e.target.value }))}
                         disabled={!selectedClassId}
                       />
                     </div>
@@ -743,7 +742,7 @@ export function Assignments() {
                         id="description"
                         placeholder="เช่น อ่านเรื่องสั้นแล้วตอบคำถาม 5 ข้อ"
                         value={newAssignmentForm.description}
-                        onChange={(event) => setNewAssignmentForm((prev) => ({ ...prev, description: event.target.value }))}
+                        onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNewAssignmentForm((prev) => ({ ...prev, description: e.target.value }))}
                         disabled={!selectedClassId}
                       />
                     </div>
@@ -754,7 +753,7 @@ export function Assignments() {
                           id="due-date"
                           type="date"
                           value={newAssignmentForm.dueDate}
-                          onChange={(event) => setNewAssignmentForm((prev) => ({ ...prev, dueDate: event.target.value }))}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => setNewAssignmentForm((prev) => ({ ...prev, dueDate: e.target.value }))}
                           disabled={!selectedClassId}
                         />
                       </div>
@@ -766,7 +765,7 @@ export function Assignments() {
                           min="0"
                           placeholder="10"
                           value={newAssignmentForm.maxScore}
-                          onChange={(event) => setNewAssignmentForm((prev) => ({ ...prev, maxScore: event.target.value }))}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => setNewAssignmentForm((prev) => ({ ...prev, maxScore: e.target.value }))}
                           disabled={!selectedClassId}
                         />
                       </div>
@@ -777,7 +776,7 @@ export function Assignments() {
                         id="attachment-url"
                         placeholder="https://..."
                         value={newAssignmentForm.attachmentUrl}
-                        onChange={(event) => setNewAssignmentForm((prev) => ({ ...prev, attachmentUrl: event.target.value }))}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewAssignmentForm((prev) => ({ ...prev, attachmentUrl: e.target.value }))}
                         disabled={!selectedClassId}
                       />
                     </div>
@@ -936,7 +935,7 @@ export function Assignments() {
                               className="pl-9"
                               placeholder="ค้นหาชื่อนักเรียนหรือเลขที่"
                               value={searchQuery}
-                              onChange={(event) => setSearchQuery(event.target.value)}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                             />
                           </div>
                           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -1023,7 +1022,7 @@ export function Assignments() {
                                     <Input
                                       placeholder="เช่น ลืมสมุด / ขอส่งพรุ่งนี้"
                                       value={draft.teacher_note}
-                                      onChange={(event) => handleSubmissionFieldChange(student.id, { teacher_note: event.target.value })}
+                                      onChange={(e: ChangeEvent<HTMLInputElement>) => handleSubmissionFieldChange(student.id, { teacher_note: e.target.value })}
                                     />
                                   </TableCell>
                                   <TableCell onClick={(event) => event.stopPropagation()}>
@@ -1033,7 +1032,7 @@ export function Assignments() {
                                       max={selectedAssignment?.max_score ?? undefined}
                                       placeholder={selectedAssignment?.max_score != null ? `/ ${selectedAssignment.max_score}` : "-"}
                                       value={draft.score}
-                                      onChange={(event) => handleSubmissionFieldChange(student.id, { score: event.target.value })}
+                                      onChange={(e: ChangeEvent<HTMLInputElement>) => handleSubmissionFieldChange(student.id, { score: e.target.value })}
                                     />
                                   </TableCell>
                                   <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
@@ -1090,8 +1089,8 @@ export function Assignments() {
                 <TableBody>
                   {studentsInClass.length === 0 ? (
                     <TableRow>
-                        <TableCell colSpan={assignments.length + 3} className="text-center py-8 text-gray-500">
-                        ยังไม่มีนักเรียนแนห้องนี้
+                      <TableCell colSpan={assignments.length + 3} className="text-center py-8 text-gray-500">
+                        ยังไม่มีนักเรียนในห้องนี้
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -1156,7 +1155,7 @@ export function Assignments() {
               <Input
                 id="edit-assignment-title"
                 value={editingAssignmentForm.title}
-                onChange={(event) => setEditingAssignmentForm((prev) => ({ ...prev, title: event.target.value }))}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingAssignmentForm((prev) => ({ ...prev, title: e.target.value }))}
                 placeholder="เช่น แบบฝึกหัดภาษาไทย หน้า 20"
                 disabled={isSavingAssignment}
               />
@@ -1166,7 +1165,7 @@ export function Assignments() {
               <Textarea
                 id="edit-assignment-description"
                 value={editingAssignmentForm.description}
-                onChange={(event) => setEditingAssignmentForm((prev) => ({ ...prev, description: event.target.value }))}
+                onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setEditingAssignmentForm((prev) => ({ ...prev, description: e.target.value }))}
                 placeholder="เช่น อ่านเรื่องสั้นแล้วตอบคำถาม 5 ข้อ"
                 disabled={isSavingAssignment}
               />
@@ -1178,7 +1177,7 @@ export function Assignments() {
                   id="edit-assignment-due-date"
                   type="date"
                   value={editingAssignmentForm.dueDate}
-                  onChange={(event) => setEditingAssignmentForm((prev) => ({ ...prev, dueDate: event.target.value }))}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingAssignmentForm((prev) => ({ ...prev, dueDate: e.target.value }))}
                   disabled={isSavingAssignment}
                 />
               </div>
@@ -1189,7 +1188,7 @@ export function Assignments() {
                   type="number"
                   min="0"
                   value={editingAssignmentForm.maxScore}
-                  onChange={(event) => setEditingAssignmentForm((prev) => ({ ...prev, maxScore: event.target.value }))}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingAssignmentForm((prev) => ({ ...prev, maxScore: event.target.value }))}
                   disabled={isSavingAssignment}
                 />
               </div>
@@ -1199,7 +1198,7 @@ export function Assignments() {
               <Input
                 id="edit-assignment-attachment"
                 value={editingAssignmentForm.attachmentUrl}
-                onChange={(event) => setEditingAssignmentForm((prev) => ({ ...prev, attachmentUrl: event.target.value }))}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setEditingAssignmentForm((prev) => ({ ...prev, attachmentUrl: e.target.value }))}
                 placeholder="https://..."
                 disabled={isSavingAssignment}
               />

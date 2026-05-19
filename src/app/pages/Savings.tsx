@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { api } from "../api";
@@ -98,7 +98,7 @@ export function Savings() {
 
   const filteredStudents = students.filter(
     (s) => {
-      const matchSearch = s.name.includes(search) || s.number.toString() === search;
+      const matchSearch = search.trim() === '' || s.name.toLowerCase().includes(search.toLowerCase()) || s.number.toString().includes(search);
       const matchClass = selectedClass === "ทั้งหมด" || (s.classRoom || "ทั่วไป") === selectedClass;
       return matchSearch && matchClass;
     }
@@ -137,14 +137,14 @@ export function Savings() {
             type="text"
             placeholder="ค้นหาชื่อ หรือเลขที่นักเรียน..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
             className="border-none bg-transparent outline-none text-slate-700 font-medium flex-1 w-full placeholder:text-slate-300 text-sm"
           />
         </div>
         <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 w-full sm:w-48 flex items-center focus-within:ring-4 focus-within:ring-amber-500/10 focus-within:border-amber-400 transition-all">
           <select
             value={selectedClass}
-            onChange={(e) => setSelectedClass(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedClass(e.target.value)}
             title="กรองตามห้องเรียน"
             className="w-full bg-transparent border-none outline-none text-slate-700 font-medium text-sm cursor-pointer"
           >
@@ -249,7 +249,7 @@ export function Savings() {
                         type="number"
                         min="1"
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
                         placeholder="จำนวนเงิน"
                         className="w-full pl-8 pr-3 py-3 rounded-xl border border-slate-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none font-semibold text-slate-800 bg-slate-50 focus:bg-white transition-all text-sm"
                       />

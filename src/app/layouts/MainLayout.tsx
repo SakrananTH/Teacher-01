@@ -16,7 +16,8 @@ import {
   Loader2,
   Save,
   GlassWater,
-  Activity
+  Activity,
+  Smile
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "../components/ui/utils";
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { name: "ตรวจการบ้าน", path: "/assignments", icon: BookOpenCheck, activeBg: "bg-indigo-50", activeText: "text-indigo-600" },
   { name: "ระบบบันทึกดื่มนม", path: "/milk", icon: GlassWater, activeBg: "bg-sky-50", activeText: "text-sky-600" },
   { name: "วัดส่วนสูง-น้ำหนัก", path: "/health", icon: Activity, activeBg: "bg-rose-50", activeText: "text-rose-600" },
+  { name: "บันทึกการแปรงฟัน", path: "/toothbrushing", icon: Smile, activeBg: "bg-teal-50", activeText: "text-teal-600" },
 ];
 
 export function MainLayout() {

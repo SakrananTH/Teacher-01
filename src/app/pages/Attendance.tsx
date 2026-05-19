@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 import { api } from "../api";
@@ -28,7 +28,6 @@ import {
   Filter,
   Info,
   MessageSquare,
-  Printer,
   RotateCcw,
   Save,
   Search,
@@ -37,6 +36,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { exportToExcel } from "../../utils/exportExcel";
 
 interface Student {
   id: string;
@@ -537,34 +537,36 @@ export function Attendance() {
   };
 
   const handleExportSummary = () => {
-    const header = ["เลขที่", "ชื่อ-นามสกุล", "มา", "สาย", "ลา", "ขาด", "บันทึกทั้งหมด", "อัตรามาเรียน (%)", "ล่าสุด"];
-    const rows = summaryRows.map(({ student, summary, attendanceRate }) => [
-      student.number,
-      student.name,
-      summary.present,
-      summary.late,
-      summary.leave,
-      summary.absent,
-      summary.total,
-      attendanceRate,
-      summary.lastRecordedDate ? formatThaiCompactDate(summary.lastRecordedDate) : "-",
-    ]);
-    const csv = [header, ...rows]
-      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","))
-      .join("\n");
+    const excelData = summaryRows.map(({ student, summary, attendanceRate }) => ({
+      'เลขที่': student.number,
+      'ชื่อ-นามสกุล': student.name,
+      'มา (ครั้ง)': summary.present,
+      'สาย (ครั้ง)': summary.late,
+      'ลา (ครั้ง)': summary.leave,
+      'ขาด (ครั้ง)': summary.absent,
+      'บันทึกทั้งหมด (ครั้ง)': summary.total,
+      'อัตรามาเรียน (%)': attendanceRate,
+      'บันทึกล่าสุด': summary.lastRecordedDate ? formatThaiCompactDate(summary.lastRecordedDate) : "-"
+    }));
 
-    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `attendance-summary-${selectedClass}-${selectedDate}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("ส่งออกไฟล์ CSV สำหรับเปิดใน Excel แล้ว");
+    exportToExcel(excelData, `สรุปการมาเรียน_${selectedClass}_${selectedDate}`);
+    toast.success("ส่งออกไฟล์ Excel สำเร็จ");
   };
 
-  const handlePrintSummary = () => {
-    window.print();
+  const handleExportDaily = () => {
+    const excelData = filteredStudents.map((student) => {
+      const draft = attendance[student.id] || createEmptyDraft();
+      return {
+        'เลขที่': student.number,
+        'ชื่อ-นามสกุล': student.name,
+        'สถานะ': STATUS_META[draft.status].label,
+        'ประเภทการลา': draft.status === "leave" && draft.leaveType !== "none" ? LEAVE_TYPE_LABELS[draft.leaveType] : "-",
+        'หมายเหตุ': draft.note.trim() || "-"
+      };
+    });
+
+    exportToExcel(excelData, `เช็คชื่อรายวัน_${selectedClass}_${selectedDate}`);
+    toast.success("ส่งออกไฟล์ Excel สำเร็จ");
   };
 
   const activeNoteDraft = noteStudent ? attendance[noteStudent.id] || createEmptyDraft() : createEmptyDraft();
@@ -610,7 +612,7 @@ export function Attendance() {
             <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-400">ห้องเรียน</label>
             <select
               value={selectedClass}
-              onChange={(event) => setSelectedClass(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLSelectElement>) => setSelectedClass(event.target.value)}
               title="กรองตามห้องเรียน"
               className="w-full cursor-pointer border-none bg-transparent text-sm font-medium text-slate-700 outline-none"
             >
@@ -627,7 +629,7 @@ export function Attendance() {
               <input
                 type="date"
                 value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setSelectedDate(event.target.value)}
                 title="เลือกวันที่เช็คชื่อ"
                 className="w-full cursor-pointer border-none bg-transparent text-sm font-medium text-slate-700 outline-none"
               />
@@ -709,6 +711,10 @@ export function Attendance() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={handleExportDaily} className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                <Download size={16} />
+                ส่งออก Excel
+              </Button>
                   <Button type="button" variant="outline" onClick={handleMarkAllPresent} className="rounded-xl">
                     <UserCheck size={16} />
                     มาทั้งหมด
@@ -729,7 +735,7 @@ export function Attendance() {
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) => setSearchTerm(event.target.value)}
                     placeholder="ค้นหาชื่อ / เลขที่ / รหัสนักเรียน"
                     className="pl-10"
                   />
@@ -859,13 +865,9 @@ export function Attendance() {
                     <p className="text-sm text-slate-500">ดูสถิติรวมของ {currentClassLabel} จากข้อมูลที่บันทึกไว้ทั้งหมด</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={handleExportSummary} className="rounded-xl">
+                    <Button type="button" variant="outline" onClick={handleExportSummary} className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50">
                       <Download size={16} />
-                      ส่งออก CSV
-                    </Button>
-                    <Button type="button" variant="outline" onClick={handlePrintSummary} className="rounded-xl">
-                      <Printer size={16} />
-                      พิมพ์ / PDF
+                      ส่งออก Excel
                     </Button>
                   </div>
                 </div>
@@ -1011,7 +1013,7 @@ export function Attendance() {
                 <label className="text-sm font-medium text-slate-700">หมายเหตุ</label>
                 <Textarea
                   value={activeNoteDraft.note}
-                  onChange={(event) => updateStudentDraft(noteStudent.id, (draft) => ({ ...draft, note: event.target.value }))}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => updateStudentDraft(noteStudent.id, (draft) => ({ ...draft, note: event.target.value }))}
                   placeholder="เช่น ผู้ปกครองแจ้งแล้ว, รถติด, กลับก่อนเวลา"
                 />
               </div>

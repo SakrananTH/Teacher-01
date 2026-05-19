@@ -8,6 +8,7 @@ import { Login } from "./pages/Login";
 import { Assignments } from "./pages/Assignments";
 import { MilkTracking } from "./pages/MilkTracking";
 import { HealthMeasurements } from "./pages/HealthMeasurements";
+import { Toothbrushing } from "./pages/Toothbrushing";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: "assignments", Component: Assignments },
       { path: "milk", Component: MilkTracking },
       { path: "health", Component: HealthMeasurements },
+      { path: "toothbrushing", Component: Toothbrushing },
     ],
   },
 ], {
